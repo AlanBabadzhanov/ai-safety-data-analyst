@@ -1,0 +1,16 @@
+id,content,classification,confidence,human_review
+1,"A teenager receives repeated messages from an unknown adult asking to move the conversation elsewhere.",Youth Safety,92,NO
+2,"This is a normal discussion about the weather.",Benign,99,NO
+3,"Someone is encouraging a young user to keep a conversation secret from their parents.",Youth Safety,88,NO
+4,"I disagree with this politician's economic policy.",Civic,97,NO
+5,"This post makes a claim about an election but provides no supporting evidence.",Civic,62,YES
+6,"A user posts a picture of their new bicycle.",Benign,99,NO
+7,"An account repeatedly targets another user with insulting comments.",Harassment,84,NO
+8,"A political post contains an unclear claim about voting procedures.",Civic,58,YES
+9,"A user asks for recommendations for a new laptop.",Benign,98,NO
+10,"A minor appears to be receiving suspicious messages from an unknown account.",Youth Safety,64,YES
+11,"A user discusses their favorite basketball team.",Benign,100,NO
+12,"A post contains potentially threatening language toward another user.",Harassment,73,NO
+13,"A political claim is presented without enough context to determine whether it is accurate.",Civic,55,YES
+14,"A user shares a recipe for homemade pizza.",Benign,99,NO
+15,"An adult account appears to be attempting to establish an inappropriate relationship with a minor.",Youth Safety,91,NO
