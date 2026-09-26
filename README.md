@@ -65,3 +65,26 @@ The project is designed around an agent-style workflow in which different analyt
                      │
                      ▼
               HUMAN REVIEW
+
+
+## ▶️ Running Locally
+
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/AlanBabadzhanov/ai-safety-data-analyst.git
+cd ai-safety-data-analyst
+
+Create a virtual environment
+python3 -m venv .venv
+source .venv/bin/activate
+
+Install dependencies
+pip install pandas streamlit openai
+
+Launch the dashboard
+streamlit run dashboard.py
+
+The application will open at:
+
+http://localhost:8501
