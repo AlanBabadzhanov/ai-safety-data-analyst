@@ -14,14 +14,79 @@ st.set_page_config(
 
 
 # ============================================================
+# SETTINGS
+# ============================================================
+
+REQUIRED_COLUMNS = [
+    "id",
+    "classification",
+    "confidence",
+    "human_review",
+    "severity"
+]
+
+
+SEVERITY_WEIGHTS = {
+    "low": 0.25,
+    "medium": 0.50,
+    "high": 0.75,
+    "critical": 1.00
+}
+
+
+# ============================================================
+# FUNCTIONS
+# ============================================================
+
+def calculate_priority(df):
+
+    result = df.copy()
+
+    result["confidence"] = pd.to_numeric(
+        result["confidence"]
+    )
+
+    result["severity_normalized"] = (
+        result["severity"]
+        .astype(str)
+        .str.strip()
+        .str.lower()
+    )
+
+    result["severity_score"] = (
+        result["severity_normalized"]
+        .map(SEVERITY_WEIGHTS)
+    )
+
+    # Confidence of 100 = no uncertainty
+    # Confidence of 0 = maximum uncertainty
+    result["uncertainty_score"] = (
+        1 - result["confidence"] / 100
+    )
+
+    # Priority combines potential impact and uncertainty.
+    result["priority_score"] = (
+        0.60 * result["severity_score"]
+        +
+        0.40 * result["uncertainty_score"]
+    )
+
+    result["priority_score"] = (
+        result["priority_score"] * 100
+    ).round(1)
+
+    return result
+
+
+# ============================================================
 # HEADER
 # ============================================================
 
 st.title("🛡️ AI Safety Data Analyst")
 
 st.caption(
-    "Human-in-the-loop analytics and quality control "
-    "for AI safety datasets"
+    "Human-in-the-loop analytics and prioritization "
+    "for AI safety datasets."
 )
 
 st.divider()
@@ -45,20 +110,192 @@ uploaded_file = st.file_uploader(
 
 if uploaded_file is not None:
 
-    df = pd.read_csv(uploaded_file)
+    try:
 
-    st.success(
-        f"Successfully loaded {len(df):,} records."
-    )
+        df = pd.read_csv(uploaded_file)
+
+        st.success(
+            f"Successfully loaded {len(df):,} records."
+        )
+
+    except Exception as e:
+
+        st.error(
+            f"Could not read the CSV file: {e}"
+        )
+
+        st.stop()
 
 else:
 
-    df = pd.read_csv("safety_dataset.csv")
+    try:
+
+        df = pd.read_csv(
+            "safety_dataset_priority.csv"
+        )
+
+        st.info(
+            "Using the upgraded demonstration dataset."
+        )
+
+    except Exception as e:
+
+        st.error(
+            f"Could not load the demonstration dataset: {e}"
+        )
+
+        st.stop()
+
+
+# ============================================================
+# DATASET VALIDATION
+# ============================================================
+
+st.subheader("🔎 Dataset Validation")
+
+validation_errors = []
+
+
+# Empty dataset
+if df.empty:
+
+    validation_errors.append(
+        "The dataset is empty. Please upload a CSV containing at least one record."
+    )
+
+
+# Required columns
+missing_columns = [
+    column
+    for column in REQUIRED_COLUMNS
+    if column not in df.columns
+]
+
+if missing_columns:
+
+    validation_errors.append(
+        "Missing required column(s): "
+        + ", ".join(missing_columns)
+    )
+
+
+# Confidence validation
+if "confidence" in df.columns:
+
+    confidence_numeric = pd.to_numeric(
+        df["confidence"],
+        errors="coerce"
+    )
+
+    if confidence_numeric.isna().any():
+
+        validation_errors.append(
+            "The confidence column contains "
+            "non-numeric or missing values."
+        )
+
+    elif (
+        (confidence_numeric < 0).any()
+        or
+        (confidence_numeric > 100).any()
+    ):
+
+        validation_errors.append(
+            "Confidence values must be between 0 and 100."
+        )
+
+
+# ID validation
+if "id" in df.columns and not df.empty:
+
+    if df["id"].isna().any():
+
+        validation_errors.append(
+            "The id column contains missing values."
+        )
+
+    if df["id"].duplicated().any():
+
+        validation_errors.append(
+            "The id column contains duplicate IDs."
+        )
+
+
+# Severity validation
+if "severity" in df.columns and not df.empty:
+
+    valid_severities = set(
+        SEVERITY_WEIGHTS.keys()
+    )
+
+    actual_severities = set(
+        df["severity"]
+        .astype(str)
+        .str.strip()
+        .str.lower()
+        .unique()
+    )
+
+    invalid_severities = (
+        actual_severities - valid_severities
+    )
+
+    if invalid_severities:
+
+        validation_errors.append(
+            "Invalid severity value(s): "
+            + ", ".join(sorted(invalid_severities))
+            + ". Use Low, Medium, High, or Critical."
+        )
+
+
+# Classification validation
+if "classification" in df.columns and not df.empty:
+
+    if df["classification"].isna().any():
+
+        validation_errors.append(
+            "The classification column contains missing values."
+        )
+
+
+# ============================================================
+# VALIDATION RESULTS
+# ============================================================
+
+if validation_errors:
+
+    st.error("Dataset validation failed.")
+
+    for error in validation_errors:
+
+        st.write(
+            f"❌ {error}"
+        )
 
     st.info(
-        "Using the built-in demonstration dataset. "
-        "Upload a CSV above to analyze your own data."
+        "Please fix the dataset and upload it again."
     )
+
+    st.stop()
+
+
+st.success(
+    "Dataset passed validation."
+)
+
+
+# ============================================================
+# DATA PREPARATION
+# ============================================================
+
+df["confidence"] = pd.to_numeric(
+    df["confidence"]
+)
+
+
+# Calculate priority
+df = calculate_priority(df)
 
 
 # ============================================================
@@ -70,176 +307,238 @@ st.subheader("🔍 Dataset Quality Audit")
 col1, col2, col3, col4 = st.columns(4)
 
 with col1:
+
     st.metric(
         "Rows",
         len(df)
     )
 
 with col2:
+
     st.metric(
         "Columns",
         len(df.columns)
     )
 
 with col3:
-    missing_values = int(
-        df.isna().sum().sum()
-    )
 
     st.metric(
         "Missing Values",
-        missing_values
+        int(df.isna().sum().sum())
     )
 
 with col4:
-    duplicate_rows = int(
-        df.duplicated().sum()
-    )
 
     st.metric(
         "Duplicate Rows",
-        duplicate_rows
+        int(df.duplicated().sum())
     )
 
 
 # ============================================================
-# DATA PREVIEW
+# DATASET PREVIEW
 # ============================================================
 
-with st.expander("View Dataset"):
+st.subheader("📊 Dataset Preview")
 
-    st.dataframe(
-        df,
-        use_container_width=True,
-        hide_index=True
-    )
-
-
-# ============================================================
-# CHECK FOR ANALYTICS COLUMNS
-# ============================================================
-
-required_columns = [
-    "classification",
-    "confidence",
-    "human_review"
-]
-
-missing_columns = [
-    column
-    for column in required_columns
-    if column not in df.columns
-]
-
-
-if missing_columns:
-
-    st.warning(
-        "This dataset does not contain all of the fields "
-        "needed for the safety analytics dashboard."
-    )
-
-    st.write("Missing fields:")
-
-    for column in missing_columns:
-        st.write(f"• `{column}`")
-
-    st.stop()
-
-
-# ============================================================
-# KEY METRICS
-# ============================================================
-
-st.divider()
-
-st.subheader("📊 Safety Analytics")
-
-total_items = len(df)
-
-average_confidence = df["confidence"].mean()
-
-review_items = df[
-    df["human_review"]
-    .astype(str)
-    .str.upper()
-    .eq("YES")
-]
-
-review_count = len(review_items)
-
-review_rate = (
-    review_count / total_items * 100
+st.dataframe(
+    df,
+    use_container_width=True
 )
 
+
+# ============================================================
+# REVIEW BUDGET
+# ============================================================
+
+st.subheader("👤 Reviewer Capacity")
+
+max_budget = min(
+    20,
+    len(df)
+)
+
+review_budget = st.slider(
+    "How many items can the reviewer inspect?",
+    min_value=1,
+    max_value=max_budget,
+    value=max_budget
+)
+
+
+# ============================================================
+# PRIORITY QUEUE
+# ============================================================
+
+review_queue = (
+    df.sort_values(
+        "priority_score",
+        ascending=False
+    )
+    .head(review_budget)
+    .copy()
+)
+
+
+# ============================================================
+# SAFETY ANALYTICS
+# ============================================================
+
+st.subheader("🛡️ Safety Analytics")
 
 col1, col2, col3, col4 = st.columns(4)
 
 with col1:
 
     st.metric(
-        "Items Analyzed",
-        total_items
+        "Total Items",
+        len(df)
     )
 
 with col2:
 
     st.metric(
-        "Avg. Confidence",
-        f"{average_confidence:.1f}%"
+        "Average Confidence",
+        f"{df['confidence'].mean():.1f}%"
     )
 
 with col3:
 
     st.metric(
-        "Human Review",
-        review_count
+        "Review Budget",
+        review_budget
     )
 
 with col4:
 
     st.metric(
-        "Review Rate",
-        f"{review_rate:.1f}%"
+        "Queue Coverage",
+        f"{review_budget / len(df) * 100:.1f}%"
     )
+
+
+st.caption(
+    "The review queue is now ranked by priority rather than "
+    "using a simple confidence cutoff."
+)
+
+
+# ============================================================
+# PRIORITY EXPLANATION
+# ============================================================
+
+st.subheader("📐 Priority Scoring")
+
+st.write(
+    "**Priority Score = 60% Severity + 40% Uncertainty**"
+)
+
+st.write(
+    "Severity represents the potential impact of a harmful "
+    "classification decision. Uncertainty is calculated as "
+    "1 − confidence."
+)
+
+st.write(
+    "This is a transparent demonstration policy. "
+    "The severity mapping is synthetic and does not represent "
+    "Meta's internal safety policy."
+)
+
+
+# ============================================================
+# REVIEW QUEUE
+# ============================================================
+
+st.subheader("🚨 Prioritized Human Review Queue")
+
+st.write(
+    f"The reviewer has capacity to inspect "
+    f"**{review_budget} item(s)**."
+)
+
+st.dataframe(
+    review_queue[
+        [
+            "id",
+            "classification",
+            "severity",
+            "confidence",
+            "uncertainty_score",
+            "priority_score",
+            "human_review"
+        ]
+    ],
+    use_container_width=True
+)
+
+
+# ============================================================
+# HIGH-SEVERITY CASES
+# ============================================================
+
+st.subheader("⚠️ High-Impact Cases")
+
+high_impact = df[
+    df["severity"]
+    .astype(str)
+    .str.lower()
+    .isin(["high", "critical"])
+].sort_values(
+    "priority_score",
+    ascending=False
+)
+
+st.dataframe(
+    high_impact[
+        [
+            "id",
+            "classification",
+            "severity",
+            "confidence",
+            "priority_score"
+        ]
+    ],
+    use_container_width=True
+)
 
 
 # ============================================================
 # CATEGORY ANALYSIS
 # ============================================================
 
-st.subheader("📊 Category Analysis")
+st.subheader("📂 Category Analysis")
 
-category_stats = (
+category_analysis = (
     df.groupby("classification")
     .agg(
-        Items=("id", "count"),
-        Average_Confidence=(
-            "confidence",
-            "mean"
-        ),
-        Human_Reviews=(
-            "human_review",
-            lambda x:
-            x.astype(str)
-            .str.upper()
-            .eq("YES")
-            .sum()
-        )
+        items=("id", "count"),
+        average_confidence=("confidence", "mean"),
+        average_priority=("priority_score", "mean")
     )
     .reset_index()
 )
 
-category_stats["Average_Confidence"] = (
-    category_stats[
-        "Average_Confidence"
-    ].round(1)
+category_analysis[
+    "average_confidence"
+] = category_analysis[
+    "average_confidence"
+].round(1)
+
+category_analysis[
+    "average_priority"
+] = category_analysis[
+    "average_priority"
+].round(1)
+
+category_analysis = category_analysis.sort_values(
+    "average_priority",
+    ascending=False
 )
 
 st.dataframe(
-    category_stats,
-    use_container_width=True,
-    hide_index=True
+    category_analysis,
+    use_container_width=True
 )
 
 
@@ -247,102 +546,43 @@ st.dataframe(
 # CONFIDENCE CHART
 # ============================================================
 
-st.subheader("📈 Confidence by Category")
+st.subheader("📈 Confidence Distribution")
 
-chart_data = (
-    category_stats
-    .set_index("classification")
-    ["Average_Confidence"]
+st.bar_chart(
+    df.set_index("id")["confidence"]
 )
-
-st.bar_chart(chart_data)
-
-
-# ============================================================
-# HUMAN REVIEW QUEUE
-# ============================================================
-
-st.subheader("⚠️ Human Review Queue")
-
-review_queue = (
-    df[
-        df["confidence"] < 70
-    ]
-    .sort_values("confidence")
-)
-
-if len(review_queue) > 0:
-
-    st.warning(
-        f"{len(review_queue)} items have confidence "
-        "below 70%."
-    )
-
-    st.dataframe(
-        review_queue,
-        use_container_width=True,
-        hide_index=True
-    )
-
-else:
-
-    st.success(
-        "No low-confidence cases detected."
-    )
 
 
 # ============================================================
 # AUTOMATED FINDINGS
 # ============================================================
 
-st.subheader("🔎 Automated Findings")
+st.subheader("🤖 Automated Findings")
 
-lowest_category = (
-    category_stats
-    .sort_values(
-        "Average_Confidence"
-    )
-    .iloc[0]
+highest_priority_item = review_queue.iloc[0]
+
+st.write(
+    f"**Highest-priority item:** "
+    f"ID {highest_priority_item['id']} "
+    f"({highest_priority_item['classification']}) "
+    f"with a priority score of "
+    f"{highest_priority_item['priority_score']:.1f}."
 )
 
-highest_review_category = (
-    category_stats
-    .sort_values(
-        "Human_Reviews",
-        ascending=False
-    )
-    .iloc[0]
+st.write(
+    f"**Severity:** "
+    f"{highest_priority_item['severity']}"
 )
 
-lowest_item = (
-    df
-    .sort_values("confidence")
-    .iloc[0]
+st.write(
+    f"**Model confidence:** "
+    f"{highest_priority_item['confidence']:.0f}%"
 )
 
-
-st.info(
-    f"""
-### Key Findings
-
-**Lowest-confidence category:**  
-{lowest_category["classification"]} 
-({lowest_category["Average_Confidence"]:.1f}% average confidence)
-
-**Most human-review cases:**  
-{highest_review_category["classification"]} 
-({int(highest_review_category["Human_Reviews"])} cases)
-
-**Highest-priority item:**  
-ID {lowest_item["id"]} 
-({lowest_item["confidence"]}% confidence)
-
-### Recommended Action
-
-Prioritize low-confidence items for human review,
-then investigate whether similar items are receiving
-inconsistent classifications.
-"""
+st.write(
+    "**Recommendation:** "
+    "Review the highest-priority cases first because they "
+    "combine potential impact with model uncertainty."
 )
 
 
@@ -350,19 +590,17 @@ inconsistent classifications.
 # CONTENT EXPLORER
 # ============================================================
 
-st.subheader("🔍 Content Explorer")
+st.subheader("🔎 Content Explorer")
 
 selected_id = st.selectbox(
     "Select an item:",
     df["id"].tolist()
 )
 
-selected_item = (
-    df[
-        df["id"] == selected_id
-    ]
-    .iloc[0]
-)
+selected_item = df[
+    df["id"] == selected_id
+].iloc[0]
+
 
 st.write(
     f"**Classification:** "
@@ -370,12 +608,22 @@ st.write(
 )
 
 st.write(
-    f"**Confidence:** "
-    f"{selected_item['confidence']}%"
+    f"**Severity:** "
+    f"{selected_item['severity']}"
 )
 
 st.write(
-    f"**Human Review:** "
+    f"**Confidence:** "
+    f"{selected_item['confidence']:.0f}%"
+)
+
+st.write(
+    f"**Priority Score:** "
+    f"{selected_item['priority_score']:.1f}"
+)
+
+st.write(
+    f"**Existing Human Review Flag:** "
     f"{selected_item['human_review']}"
 )
 
@@ -392,16 +640,16 @@ if "content" in df.columns:
 # EXPORT
 # ============================================================
 
-st.subheader("📥 Export Analysis")
+st.subheader("📤 Export Analysis")
 
 csv_export = review_queue.to_csv(
     index=False
 )
 
 st.download_button(
-    label="Download Human Review Queue",
+    label="Download Prioritized Review Queue",
     data=csv_export,
-    file_name="human_review_queue.csv",
+    file_name="prioritized_review_queue.csv",
     mime="text/csv"
 )
 
