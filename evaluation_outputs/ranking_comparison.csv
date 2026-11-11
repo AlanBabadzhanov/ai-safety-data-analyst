@@ -1,0 +1,5 @@
+method,review_budget,average_youth_safety,legacy_review_flags,random_min,random_max
+random,20,4.19,2.46,0.0,10.0
+confidence,20,5.0,12.0,,
+severity,20,20.0,5.0,,
+combined,20,20.0,5.0,,

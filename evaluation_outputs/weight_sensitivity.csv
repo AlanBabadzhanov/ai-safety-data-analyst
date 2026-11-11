@@ -1,0 +1,8 @@
+severity_weight,uncertainty_weight,youth_safety_cases,high_critical_cases,legacy_review_flags
+0.0,100.0,5,11,12
+20.0,80.0,10,14,12
+40.0,60.0,16,20,6
+50.0,50.0,19,20,6
+60.0,40.0,20,20,5
+80.0,19.999999999999996,20,20,5
+100.0,0.0,20,20,5
